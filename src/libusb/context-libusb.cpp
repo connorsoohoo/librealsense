@@ -10,8 +10,14 @@ namespace librealsense
 {
     namespace platform
     {       
+        struct global_context_lock {
+            std::mutex mutex;
+        };
+        static global_context_lock g_libusb_lock;
+
         usb_context::usb_context() : _ctx(NULL), _list(NULL), _count(0)
         {
+            std::lock_guard<std::mutex> lock(g_libusb_lock.mutex);
             const int max_retries = 10;
             const int retry_delay_ms = 100;
             
@@ -69,8 +75,12 @@ namespace librealsense
             assert(_handler_requests == 0); // we need the last libusb_close to trigger an event to stop the event thread
             if (_event_handler.joinable())
                 _event_handler.join();
-            if (_ctx)
+            
+            if (_ctx) {
+                std::lock_guard<std::mutex> lock(g_libusb_lock.mutex);
                 libusb_exit(_ctx);
+                _ctx = nullptr;
+            }
         }
         
         libusb_context* usb_context::get()
